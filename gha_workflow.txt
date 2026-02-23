@@ -1,0 +1,192 @@
+name: Build and Publish Wheels
+
+on:
+  # Manually trigger from the Actions tab, with an optional tag override
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "neo4j/mcp release tag (e.g. v1.4.2 — leave blank for latest)"
+        required: false
+        default: ""
+      py_version:
+        description: "Python package version override (e.g. 1.4.2.1 — leave blank to mirror tag)"
+        required: false
+        default: ""
+      upload:
+        description: "Upload wheels to PyPI?"
+        required: true
+        type: choice
+        options:
+          - "true"
+          - "false"
+        default: "false"
+
+  # Triggered automatically when neo4j/mcp publishes a new release and
+  # sends a repository_dispatch event to this repo (see README for setup).
+  repository_dispatch:
+    types: [new-mcp-release]
+
+  # Daily schedule as a fallback — detects new releases even without a webhook
+  schedule:
+    - cron: "0 9 * * *"
+
+jobs:
+  check-version:
+    name: Check for new release
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
+      py_version: ${{ steps.resolve.outputs.py_version }}
+      already_published: ${{ steps.pypi_check.outputs.already_published }}
+
+    steps:
+      - name: Resolve tag
+        id: resolve
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ github.event.inputs.tag || github.event.client_payload.tag }}
+          INPUT_PY_VERSION: ${{ github.event.inputs.py_version }}
+        run: |
+          if [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG=$(curl -fsSL \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              https://api.github.com/repos/neo4j/mcp/releases/latest \
+              | jq -r .tag_name)
+          fi
+
+          VERSION="${TAG#v}"
+
+          # Python package version defaults to the binary version
+          PY_VERSION="${INPUT_PY_VERSION:-$VERSION}"
+
+          echo "tag=$TAG"           >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION"   >> "$GITHUB_OUTPUT"
+          echo "py_version=$PY_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved tag: $TAG  →  py_version: $PY_VERSION"
+
+      - name: Check if already published to PyPI
+        id: pypi_check
+        env:
+          PY_VERSION: ${{ steps.resolve.outputs.py_version }}
+        run: |
+          HTTP=$(curl -o /dev/null -w "%{http_code}" -fsSL \
+            "https://pypi.org/pypi/neo4j-mcp/$PY_VERSION/json" || true)
+          if [ "$HTTP" = "200" ]; then
+            echo "already_published=true"  >> "$GITHUB_OUTPUT"
+            echo "Version $PY_VERSION is already on PyPI — skipping build"
+          else
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
+            echo "Version $PY_VERSION not yet on PyPI — proceeding"
+          fi
+
+  build:
+    name: Build wheels
+    needs: check-version
+    if: needs.check-version.outputs.already_published == 'false'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+
+      - name: Restore binary cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/neo4j-mcp-wheels
+          key: mcp-binaries-${{ needs.check-version.outputs.version }}
+          # No restore-keys — we only want an exact version match
+
+      - name: Build wheels
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          go run build_wheels.go \
+            -version    "${{ needs.check-version.outputs.tag }}" \
+            -py-version "${{ needs.check-version.outputs.py_version }}" \
+            -output     ./dist
+
+      - name: List built wheels
+        run: ls -lh dist/
+
+      - name: Upload wheels as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ needs.check-version.outputs.py_version }}
+          path: dist/*.whl
+          retention-days: 7
+
+  publish:
+    name: Publish to PyPI
+    needs: [check-version, build]
+    runs-on: ubuntu-latest
+    environment: pypi       # requires manual approval if configured in repo settings
+    permissions:
+      id-token: write       # required for OIDC trusted publishing
+
+    # Only publish on:
+    #   - workflow_dispatch with upload=true
+    #   - repository_dispatch (always publish — triggered by a real release)
+    #   - schedule (always publish — only runs if check-version passes)
+    if: |
+      needs.check-version.outputs.already_published == 'false' && (
+        github.event_name == 'repository_dispatch' ||
+        github.event_name == 'schedule'            ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.upload == 'true')
+      )
+
+    steps:
+      - name: Download wheels artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-${{ needs.check-version.outputs.py_version }}
+          path: dist/
+
+      - name: List wheels to publish
+        run: ls -lh dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          # Uses OIDC trusted publishing by default (no stored token needed).
+          # To use an API token instead, uncomment the next line and add
+          # PYPI_TOKEN to your repository secrets:
+          # password: ${{ secrets.PYPI_TOKEN }}
+
+  notify:
+    name: Notify on failure
+    needs: [check-version, build, publish]
+    runs-on: ubuntu-latest
+    if: failure()
+
+    steps:
+      - name: Create GitHub issue on failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag        = "${{ needs.check-version.outputs.tag }}";
+            const py_version = "${{ needs.check-version.outputs.py_version }}";
+            const run_url    = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              title: `Wheel build/publish failed for ${tag}`,
+              body:  [
+                `The wheel build or publish job failed for **${tag}** (py package \`${py_version}\`).`,
+                ``,
+                `**Run:** ${run_url}`,
+                ``,
+                `Please investigate and re-run manually if needed.`,
+              ].join("\n"),
+              labels: ["bug", "automated"],
+            });
