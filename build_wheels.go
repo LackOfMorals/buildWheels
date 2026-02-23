@@ -66,12 +66,12 @@ type platform struct {
 }
 
 var platformMap = map[string]platform{
-	"Darwin_amd64":  {"macosx_10_9_x86_64", "tar.gz", binaryName},
-	"Darwin_arm64":  {"macosx_11_0_arm64", "tar.gz", binaryName},
-	"Linux_amd64":   {"manylinux_2_17_x86_64", "tar.gz", binaryName},
-	"Linux_arm64":   {"manylinux_2_17_aarch64", "tar.gz", binaryName},
-	"Windows_amd64": {"win_amd64", "zip", binaryName + ".exe"},
-	"Windows_arm64": {"win_arm64", "zip", binaryName + ".exe"},
+	"Darwin_amd64":   {"macosx_10_9_x86_64", "tar.gz", binaryName},
+	"Darwin_arm64":   {"macosx_11_0_arm64", "tar.gz", binaryName},
+	"Linux_x86_64":   {"manylinux_2_17_x86_64", "tar.gz", binaryName},
+	"Linux_arm64":    {"manylinux_2_17_aarch64", "tar.gz", binaryName},
+	"Windows_x86_64": {"win_amd64", "zip", binaryName + ".exe"},
+	"Windows_arm64":  {"win_arm64", "zip", binaryName + ".exe"},
 }
 
 // ---------------------------------------------------------------------------
@@ -284,7 +284,7 @@ func normalize(name string) string {
 }
 
 func wheelFilename(pkg, version, plat string) string {
-	return fmt.Sprintf("%s-%s-py3-none-%s.whl", normalize(pkg), version, plat)
+	return fmt.Sprintf("%s-%s-py30-none-%s.whl", normalize(pkg), version, plat)
 }
 
 // unixShim uses os.execv to replace the current process — zero subprocess overhead.

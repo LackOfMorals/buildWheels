@@ -52,7 +52,7 @@ pipx install -i https://test.pypi.org/simple/ neo4j-mcp
 ### uv
 
 ```bash
-uvx -i https://test.pypi.org/simple/  neo4j-mcp 
+uv tool install --index-url https://test.pypi.org/simple/ neo4j-mcp
 
 ```
 
@@ -62,7 +62,6 @@ Downloads and executes.  You will need to include the neo4j-mcp args as shown be
 ```bash
 uvx -i https://test.pypi.org/simple/  neo4j-mcp --neo4j-uri YOUR_NEO4J_INSTANCE_URI --neo4j-username YOUR_NEO4J_USERNAME --neo4j-password YOUR_NEO4J_PASSWORD
 ```
-
 
 
 ## MCP Client Setup Guide
