@@ -33,3 +33,7 @@ go.work.sum
 
 # Python wheel dist folder
 dist/
+
+# Mac
+.DS_Store
+

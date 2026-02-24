@@ -66,7 +66,7 @@ type platform struct {
 }
 
 var platformMap = map[string]platform{
-	"Darwin_amd64":   {"macosx_10_9_x86_64", "tar.gz", binaryName},
+	"Darwin_x86_64":  {"macosx_10_9_x86_64", "tar.gz", binaryName},
 	"Darwin_arm64":   {"macosx_11_0_arm64", "tar.gz", binaryName},
 	"Linux_x86_64":   {"manylinux_2_17_x86_64", "tar.gz", binaryName},
 	"Linux_arm64":    {"manylinux_2_17_aarch64", "tar.gz", binaryName},
