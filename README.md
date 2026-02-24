@@ -23,9 +23,9 @@ uvx neo4j-mcp
 ## How it works
 
 1. Fetches the latest (or a specified) release from `github.com/neo4j/mcp`
-2. Downloads the pre-built binary archive for each target platform
+2. If not in local cache, downloads the pre-built binary archive for each target platform
 3. Extracts the `neo4j-mcp` binary and packages it into a correctly-tagged Python wheel
-4. Optionally uploads each wheel to PyPI
+4. ( Optionally ) uploads each wheel to PyPI
 
 The wheel contains a thin Python shim that locates and `exec`s the bundled binary, so `neo4j-mcp` is available on the user's `PATH` after install with no runtime overhead.
 
@@ -88,12 +88,12 @@ ls dist/
 
 | Platform key | Binary | Wheel tag |
 |---|---|---|
-| `linux_amd64` | `neo4j-mcp` | `manylinux_2_17_x86_64` |
-| `linux_arm64` | `neo4j-mcp` | `manylinux_2_17_aarch64` |
-| `darwin_amd64` | `neo4j-mcp` | `macosx_10_9_x86_64` |
-| `darwin_arm64` | `neo4j-mcp` | `macosx_11_0_arm64` |
-| `windows_amd64` | `neo4j-mcp.exe` | `win_amd64` |
-| `windows_arm64` | `neo4j-mcp.exe` | `win_arm64` |
+| `Linux_x86_64` | `neo4j-mcp` | `manylinux_2_17_x86_64` |
+| `Linux_arm64` | `neo4j-mcp` | `manylinux_2_17_aarch64` |
+| `Darwin_x86_64` | `neo4j-mcp` | `macosx_10_9_x86_64` |
+| `Darwin_arm64` | `neo4j-mcp` | `macosx_11_0_arm64` |
+| `Windows_amd64` | `neo4j-mcp.exe` | `win_amd64` |
+| `Windows_arm64` | `neo4j-mcp.exe` | `win_arm64` |
 
 ---
 
@@ -105,11 +105,19 @@ ls dist/
 go run build_wheels.go
 ```
 
-### Build wheels for a specific release
+### Build wheels for a specific MCP Server release
 
 ```bash
 go run build_wheels.go -version v1.4.0
 ```
+
+
+### Build wheels for a specific MCP Server release with a different PyPi version
+
+```bash
+go run build_wheels.go -version v1.4.0 -py-version 1.0.1
+```
+
 
 ### Build for specific platforms only
 
@@ -250,3 +258,52 @@ This is non-fatal. The script logs a warning and continues. PyPI does not allow 
 **Wheel installs but binary does not run**
 
 Verify the executable bit is set correctly — the shim relies on `os.execv` (Unix) or `subprocess` (Windows) to hand off to the bundled binary. Re-running the build and reinstalling usually resolves this.
+
+
+## Fun with Wheel files 
+
+
+### Zip files
+Three zip-related issues we've now fixed:
+
+| Problem | Symptom | Fix |
+| --- | --- | --- |
+| `zip.Deflate` data descriptors | PyPI/twine `400 Invalid distribution` | `CreateRaw` + pre-computed CRC/sizes |
+| Empty `RECORD` | uv rejects wheel as malformed | Two-pass build with proper SHA-256 hashes |
+| Missing 32-bit size fields | uv skips entries with zip64 fields, `WHEEL not found` | Set both `CompressedSize` and `CompressedSize64` |
+
+
+### Platform not found
+
+The installers - `pip`, `pipx` etc.. look for  tags that match the platform they are executed on.   If one cannot be found, the installation will fail.  The tags can be listed by running the following Python code
+
+```Python
+import platform, subprocess, sys
+
+# Quick readable summary
+print(platform.platform())
+
+# Full list of tags this interpreter accepts — the wheel must match one
+result = subprocess.run(
+    [sys.executable, "-m", "pip", "debug", "--verbose"],
+    capture_output=True, text=True
+)
+print(result.stdout)
+```
+
+Look for the filename of a Wheel in the resulting list
+
+
+### License
+
+  The license used in the metadata for the Wheel has to be one from [SPDX License List | Software Package Data Exchange (SPDX)](https://spdx.org/licenses/). The upload of Wheels files will likely fail if this is not the case
+
+
+### uv / uvx
+
+Are much more strict than pip / pipx when it comes to following the specification for Wheel files.  Make use of this by trying to install a Wheel file with `uv`
+
+```Bash
+uv tool install PATH_TO_WHEEL_FILE
+
+```
