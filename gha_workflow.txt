@@ -98,6 +98,12 @@ jobs:
         with:
           go-version: "1.21"
 
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('go.mod') }}
+
       - name: Restore binary cache
         uses: actions/cache@v4
         with:
@@ -109,10 +115,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          go run build_wheels.go \
-            -version    "${{ needs.check-version.outputs.tag }}" \
-            -py-version "${{ needs.check-version.outputs.py_version }}" \
-            -output     ./dist
+          go run . \
+            -repo        neo4j/mcp \
+            -binary-name neo4j-mcp \
+            -version     "${{ needs.check-version.outputs.tag }}" \
+            -py-version  "${{ needs.check-version.outputs.py_version }}" \
+            -license     LICENSE \
+            -description DESCRIPTION.md \
+            -output      ./dist
 
       - name: List built wheels
         run: ls -lh dist/
