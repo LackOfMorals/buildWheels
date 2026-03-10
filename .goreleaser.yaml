@@ -9,7 +9,7 @@ before:
 
 builds:
   - id: buildwheels
-    main: main
+    main: ./
     binary: buildwheels
     env:
       - CGO_ENABLED=0        # pure Go, no C deps — enables clean cross-compilation
