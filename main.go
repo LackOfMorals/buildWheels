@@ -36,6 +36,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -181,7 +182,7 @@ func run(cfg *Config) error {
 	)
 
 	// Log available asset names at debug so mismatches are immediately obvious.
-	if slog.Default().Enabled(nil, slog.LevelDebug) {
+	if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
 		names := make([]string, len(rel.Assets))
 		for i, a := range rel.Assets {
 			names[i] = a.Name
