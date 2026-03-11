@@ -3,10 +3,8 @@
 // A wheel is a zip file with a specific internal layout. This file handles
 // building the shim package, metadata, and RECORD, then writing the zip.
 //
-// Note: the Python compatibility tag is "py3" (any Python 3), consistent with
-// the Tag field in the WHEEL metadata. The original build_wheels.go had a
-// latent mismatch (filename used "py30"; WHEEL metadata used "py3") which is
-// corrected here.
+// Note: the Python compatibility tag is "py30" (any Python 3), consistent with
+// the Tag field in the WHEEL metadata.
 package main
 
 import (
@@ -32,7 +30,7 @@ func normalize(name string) string {
 // wheelFilename returns the canonical .whl filename for the given package,
 // version, and platform tag.
 func wheelFilename(pkg, version, plat string) string {
-	return fmt.Sprintf("%s-%s-py3-none-%s.whl", normalize(pkg), version, plat)
+	return fmt.Sprintf("%s-%s-py30-none-%s.whl", normalize(pkg), version, plat)
 }
 
 // recordHash returns the base64url (no-padding) SHA-256 digest of data in the
