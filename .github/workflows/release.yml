@@ -4,6 +4,17 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing git tag to release (e.g. v0.5.0)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run (skip publish and push)'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write   # needed to create GitHub Releases and upload assets
