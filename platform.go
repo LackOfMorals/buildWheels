@@ -19,12 +19,12 @@ type platformDef struct {
 
 // knownPlatforms is the canonical set of supported build targets.
 var knownPlatforms = map[string]platformDef{
-	"Darwin_x86_64":  {"macosx_10_9_x86_64", "tar.gz", false},
-	"Darwin_arm64":   {"macosx_11_0_arm64", "tar.gz", false},
-	"Linux_x86_64":   {"manylinux_2_17_x86_64", "tar.gz", false},
-	"Linux_arm64":    {"manylinux_2_17_aarch64", "tar.gz", false},
-	"Windows_x86_64": {"win_amd64", "zip", true},
-	"Windows_arm64":  {"win_arm64", "zip", true},
+	"darwin_x86_64":  {"macosx_10_9_x86_64", "tar.gz", false},
+	"darwin_arm64":   {"macosx_11_0_arm64", "tar.gz", false},
+	"linux_x86_64":   {"manylinux_2_17_x86_64", "tar.gz", false},
+	"linux_arm64":    {"manylinux_2_17_aarch64", "tar.gz", false},
+	"windows_x86_64": {"win_amd64", "zip", true},
+	"windows_arm64":  {"win_arm64", "zip", true},
 }
 
 // assetEntry is a release asset fully resolved and ready to download.
