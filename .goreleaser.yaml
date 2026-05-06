@@ -29,10 +29,10 @@ builds:
 
 archives:
   - id: default
-  formats:
+    formats:
       - tar.gz
-  # this name template makes the OS and Arch compatible with the results of `uname`.
-  name_template: >-
+    # this name template makes the OS and Arch compatible with the results of `uname`.
+    name_template: >-
       {{ .Binary }}_
       {{- .Version }}_
       {{- title .Os }}_
