@@ -188,7 +188,7 @@ func run(ctx context.Context, cfg *Config) error {
 	binaryVersion := strings.TrimPrefix(rel.TagName, "v")
 	pyVersion := cfg.PyVersion
 	if pyVersion == "" {
-		pyVersion = binaryVersion
+		pyVersion = pep440Normalize(binaryVersion)
 	}
 	slog.Info("resolved release",
 		"binary_version", binaryVersion,
