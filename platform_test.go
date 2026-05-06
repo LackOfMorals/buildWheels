@@ -93,10 +93,28 @@ func TestResolveAssets_WindowsBinaryHasExeSuffix(t *testing.T) {
 }
 
 func TestResolveAssets_NotFound(t *testing.T) {
-	assets := assetList("other_1.0.0_Linux_x86_64.tar.gz")
-	result := resolveAssetsByPlatform(assets, "mytool", "1.0.0", []string{"Linux_x86_64"})
+	assets := assetList("other_1.0.0_linux_x86_64.tar.gz")
+	result := resolveAssetsByPlatform(assets, "mytool", "1.0.0", []string{"linux_x86_64"})
 	if len(result) != 0 {
 		t.Fatalf("expected 0 entries, got %d", len(result))
+	}
+}
+
+func TestResolveAssets_CaseInsensitiveFilename(t *testing.T) {
+	// GoReleaser sometimes capitalises OS/arch segments; matching must be
+	// case-insensitive so both "Darwin_arm64" and "darwin_arm64" resolve.
+	assets := assetList(
+		"mytool_1.0.0_Darwin_arm64.tar.gz",
+		"mytool_1.0.0_Linux_x86_64.tar.gz",
+	)
+	result := resolveAssetsByPlatform(assets, "mytool", "1.0.0", []string{"darwin_arm64", "linux_x86_64"})
+	if len(result) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(result))
+	}
+	for _, e := range result {
+		if e.URL == "" {
+			t.Errorf("%s: URL is empty", e.PlatformKey)
+		}
 	}
 }
 
@@ -229,13 +247,26 @@ func TestIndexAssets(t *testing.T) {
 		{Name: "b.zip", BrowserDownloadURL: "https://example.com/b.zip"},
 	}
 	idx := indexAssets(assets)
-	if idx["a.tar.gz"] != "https://example.com/a.tar.gz" {
+	if idx["a.tar.gz"].BrowserDownloadURL != "https://example.com/a.tar.gz" {
 		t.Error("index lookup for a.tar.gz failed")
 	}
-	if idx["b.zip"] != "https://example.com/b.zip" {
+	if idx["b.zip"].BrowserDownloadURL != "https://example.com/b.zip" {
 		t.Error("index lookup for b.zip failed")
 	}
 	if _, ok := idx["missing"]; ok {
 		t.Error("unexpected key 'missing' in index")
+	}
+}
+
+func TestIndexAssets_CaseInsensitive(t *testing.T) {
+	assets := []ghAsset{
+		{Name: "Tool_Darwin_arm64.tar.gz", BrowserDownloadURL: "https://example.com/mac.tar.gz"},
+	}
+	idx := indexAssets(assets)
+	if _, ok := idx["tool_darwin_arm64.tar.gz"]; !ok {
+		t.Error("expected case-insensitive match for lowercase key")
+	}
+	if idx["tool_darwin_arm64.tar.gz"].Name != "Tool_Darwin_arm64.tar.gz" {
+		t.Error("original asset name should be preserved")
 	}
 }

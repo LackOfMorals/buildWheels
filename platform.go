@@ -61,17 +61,16 @@ func resolveAssetsByPlatform(assets []ghAsset, binaryName, version string, wantP
 		}
 
 		// Primary pattern: {binary}_{version}_{OS_Arch}.{ext}
-		primary := fmt.Sprintf("%s_%s_%s.%s", binaryName, version, platKey, def.archiveExt)
 		// Fallback pattern: {binary}_{OS_Arch}.{ext}  (no version in filename)
-		fallback := fmt.Sprintf("%s_%s.%s", binaryName, platKey, def.archiveExt)
+		// Both are lowercased to match the case-normalised index.
+		primary := strings.ToLower(fmt.Sprintf("%s_%s_%s.%s", binaryName, version, platKey, def.archiveExt))
+		fallback := strings.ToLower(fmt.Sprintf("%s_%s.%s", binaryName, platKey, def.archiveExt))
 
 		slog.Debug("trying asset names", "platform", platKey, "primary", primary, "fallback", fallback)
 
-		assetName := primary
-		url, ok := idx[primary]
+		asset, ok := idx[primary]
 		if !ok {
-			assetName = fallback
-			url, ok = idx[fallback]
+			asset, ok = idx[fallback]
 		}
 		if !ok {
 			slog.Debug("no asset found for platform, skipping",
@@ -87,8 +86,8 @@ func resolveAssetsByPlatform(assets []ghAsset, binaryName, version string, wantP
 			WheelTag:    def.wheelTag,
 			ArchiveExt:  def.archiveExt,
 			BinaryInArc: binInArc,
-			AssetName:   assetName,
-			URL:         url,
+			AssetName:   asset.Name,
+			URL:         asset.BrowserDownloadURL,
 		})
 	}
 	return result
@@ -102,7 +101,7 @@ func resolveAssetsByName(assets []ghAsset, assetNames []string) []assetEntry {
 
 	var result []assetEntry
 	for _, name := range assetNames {
-		url, ok := idx[name]
+		asset, ok := idx[strings.ToLower(name)]
 		if !ok {
 			slog.Warn("specified asset not found in release, skipping", "asset", name)
 			continue
@@ -123,8 +122,8 @@ func resolveAssetsByName(assets []ghAsset, assetNames []string) []assetEntry {
 			WheelTag:    wheelTag,
 			ArchiveExt:  ext,
 			BinaryInArc: binInArc,
-			AssetName:   name,
-			URL:         url,
+			AssetName:   asset.Name,
+			URL:         asset.BrowserDownloadURL,
 		})
 	}
 	return result
@@ -174,11 +173,14 @@ func buildWantedSet(platforms []string) map[string]bool {
 	return s
 }
 
-// indexAssets builds a name→URL map from a slice of ghAsset for O(1) lookup.
-func indexAssets(assets []ghAsset) map[string]string {
-	m := make(map[string]string, len(assets))
+// indexAssets builds a lowercase(name)→asset map for case-insensitive O(1)
+// lookup. GoReleaser archive names vary in capitalisation across configurations
+// (e.g. "Darwin_x86_64" vs "darwin_x86_64"), so normalising to lowercase on
+// both sides of the lookup is the safest approach.
+func indexAssets(assets []ghAsset) map[string]ghAsset {
+	m := make(map[string]ghAsset, len(assets))
 	for _, a := range assets {
-		m[a.Name] = a.BrowserDownloadURL
+		m[strings.ToLower(a.Name)] = a
 	}
 	return m
 }
