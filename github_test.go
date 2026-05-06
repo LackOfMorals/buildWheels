@@ -2,32 +2,35 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
-// withMockGitHub starts a test HTTP server, points ghBaseURL at it for the
-// duration of the test, and restores the original value on cleanup.
-func withMockGitHub(t *testing.T, handler http.HandlerFunc) {
+// mockGithubClient starts a test HTTP server and returns a githubClient
+// pointed at it. The server is closed automatically when the test ends.
+// Tests are now safe to run in parallel as no global state is mutated.
+func mockGithubClient(t *testing.T, handler http.HandlerFunc) *githubClient {
 	t.Helper()
 	srv := httptest.NewServer(handler)
-	t.Cleanup(func() { srv.Close() })
-	orig := ghBaseURL
-	ghBaseURL = srv.URL
-	t.Cleanup(func() { ghBaseURL = orig })
+	t.Cleanup(srv.Close)
+	return &githubClient{
+		baseURL: srv.URL,
+		client:  httpClient,
+	}
 }
 
 func TestFetchRelease_Latest(t *testing.T) {
 	want := ghRelease{
 		TagName: "v1.2.3",
 		Assets: []ghAsset{
-			{Name: "tool_1.2.3_Linux_x86_64.tar.gz", BrowserDownloadURL: "https://example.com/a.tar.gz"},
+			{Name: "tool_1.2.3_linux_x86_64.tar.gz", BrowserDownloadURL: "https://example.com/a.tar.gz"},
 		},
 	}
 
-	withMockGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+	c := mockGithubClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/repos/owner/repo/releases/latest" {
 			http.NotFound(w, r)
 			return
@@ -39,7 +42,7 @@ func TestFetchRelease_Latest(t *testing.T) {
 		json.NewEncoder(w).Encode(want)
 	})
 
-	got, err := fetchRelease("owner/repo", "")
+	got, err := c.fetchRelease(context.Background(), "owner/repo", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -57,7 +60,7 @@ func TestFetchRelease_Latest(t *testing.T) {
 func TestFetchRelease_Tagged(t *testing.T) {
 	want := ghRelease{TagName: "v2.0.0"}
 
-	withMockGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+	c := mockGithubClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/repos/owner/repo/releases/tags/v2.0.0" {
 			http.NotFound(w, r)
 			return
@@ -65,7 +68,7 @@ func TestFetchRelease_Tagged(t *testing.T) {
 		json.NewEncoder(w).Encode(want)
 	})
 
-	got, err := fetchRelease("owner/repo", "v2.0.0")
+	got, err := c.fetchRelease(context.Background(), "owner/repo", "v2.0.0")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -75,23 +78,23 @@ func TestFetchRelease_Tagged(t *testing.T) {
 }
 
 func TestFetchRelease_404(t *testing.T) {
-	withMockGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+	c := mockGithubClient(t, func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 	})
 
-	_, err := fetchRelease("owner/repo", "v99.0.0")
+	_, err := c.fetchRelease(context.Background(), "owner/repo", "v99.0.0")
 	if err == nil {
 		t.Fatal("expected error for 404 response, got nil")
 	}
 }
 
 func TestFetchRelease_InvalidJSON(t *testing.T) {
-	withMockGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+	c := mockGithubClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("not valid json {{{"))
 	})
 
-	_, err := fetchRelease("owner/repo", "")
+	_, err := c.fetchRelease(context.Background(), "owner/repo", "")
 	if err == nil {
 		t.Fatal("expected error for invalid JSON, got nil")
 	}
@@ -100,11 +103,11 @@ func TestFetchRelease_InvalidJSON(t *testing.T) {
 func TestFetchRelease_EmptyAssets(t *testing.T) {
 	rel := ghRelease{TagName: "v1.0.0", Assets: []ghAsset{}}
 
-	withMockGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+	c := mockGithubClient(t, func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(rel)
 	})
 
-	got, err := fetchRelease("owner/repo", "")
+	got, err := c.fetchRelease(context.Background(), "owner/repo", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -117,17 +120,17 @@ func TestFetchRelease_MultipleAssets(t *testing.T) {
 	rel := ghRelease{
 		TagName: "v3.0.0",
 		Assets: []ghAsset{
-			{Name: "tool_Linux_x86_64.tar.gz", BrowserDownloadURL: "https://example.com/1"},
-			{Name: "tool_Darwin_arm64.tar.gz", BrowserDownloadURL: "https://example.com/2"},
-			{Name: "tool_Windows_x86_64.zip", BrowserDownloadURL: "https://example.com/3"},
+			{Name: "tool_linux_x86_64.tar.gz", BrowserDownloadURL: "https://example.com/1"},
+			{Name: "tool_darwin_arm64.tar.gz", BrowserDownloadURL: "https://example.com/2"},
+			{Name: "tool_windows_x86_64.zip", BrowserDownloadURL: "https://example.com/3"},
 		},
 	}
 
-	withMockGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+	c := mockGithubClient(t, func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(rel)
 	})
 
-	got, err := fetchRelease("owner/repo", "")
+	got, err := c.fetchRelease(context.Background(), "owner/repo", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

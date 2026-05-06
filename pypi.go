@@ -3,6 +3,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5" //nolint:gosec // MD5 required by PyPI legacy upload API
 	"crypto/sha256"
 	"fmt"
@@ -26,7 +27,7 @@ func wheelDigests(data []byte) (md5hex, sha256hex string) {
 
 // uploadToPyPI uploads a single wheel file to a PyPI-compatible legacy upload
 // endpoint. username is "__token__" when using an API token as the password.
-func uploadToPyPI(wheelPath, pkg, version, pypiURL, username, password string) error {
+func uploadToPyPI(ctx context.Context, wheelPath, pkg, version, pypiURL, username, password string) error {
 	wheelData, err := os.ReadFile(wheelPath)
 	if err != nil {
 		return fmt.Errorf("read wheel: %w", err)
@@ -42,7 +43,7 @@ func uploadToPyPI(wheelPath, pkg, version, pypiURL, username, password string) e
 		":action":          "file_upload",
 		"protocol_version": "1",
 		"filetype":         "bdist_wheel",
-		"pyversion":        "py30",
+		"pyversion":        "py3",
 		"metadata_version": "2.4",
 		"name":             pkg,
 		"version":          version,
@@ -68,14 +69,14 @@ func uploadToPyPI(wheelPath, pkg, version, pypiURL, username, password string) e
 	}
 	mw.Close()
 
-	req, err := http.NewRequest(http.MethodPost, pypiURL, body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, pypiURL, body)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	req.SetBasicAuth(username, password)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}

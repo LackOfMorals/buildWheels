@@ -24,6 +24,19 @@ func testCfg(t *testing.T) *Config {
 	}
 }
 
+// testSpec returns a minimal WheelSpec for the given platform tag.
+func testSpec(binaryFilename, version, platTag string) WheelSpec {
+	return WheelSpec{
+		BinaryData:      []byte("fake binary"),
+		BinaryFilename:  binaryFilename,
+		BinaryVersion:   version,
+		PyVersion:       version,
+		PlatformTag:     platTag,
+		DescriptionData: []byte("# Description"),
+		LicenseData:     []byte("MIT License"),
+	}
+}
+
 // wheelEntries opens a .whl file and returns the set of entry names it contains.
 func wheelEntries(t *testing.T, path string) map[string][]byte {
 	t.Helper()
@@ -53,11 +66,7 @@ func wheelEntries(t *testing.T, path string) map[string][]byte {
 
 func TestBuildWheel_RequiredEntries(t *testing.T) {
 	cfg := testCfg(t)
-	outPath, err := buildWheel(
-		[]byte("fake binary"), "myrepo", "1.2.3",
-		cfg, "1.2.3", "manylinux_2_17_x86_64",
-		[]byte("# Description"), []byte("MIT License"),
-	)
+	outPath, err := buildWheel(testSpec("myrepo", "1.2.3", "manylinux_2_17_x86_64"), cfg)
 	if err != nil {
 		t.Fatalf("buildWheel: %v", err)
 	}
@@ -83,11 +92,7 @@ func TestBuildWheel_RequiredEntries(t *testing.T) {
 
 func TestBuildWheel_Filename(t *testing.T) {
 	cfg := testCfg(t)
-	outPath, err := buildWheel(
-		[]byte("bin"), "myrepo", "2.0.0",
-		cfg, "2.0.0", "macosx_11_0_arm64",
-		[]byte("desc"), []byte("lic"),
-	)
+	outPath, err := buildWheel(testSpec("myrepo", "2.0.0", "macosx_11_0_arm64"), cfg)
 	if err != nil {
 		t.Fatalf("buildWheel: %v", err)
 	}
@@ -100,11 +105,7 @@ func TestBuildWheel_Filename(t *testing.T) {
 
 func TestBuildWheel_UnixShim(t *testing.T) {
 	cfg := testCfg(t)
-	outPath, err := buildWheel(
-		[]byte("bin"), "myrepo", "1.0.0",
-		cfg, "1.0.0", "manylinux_2_17_x86_64",
-		[]byte("desc"), []byte("lic"),
-	)
+	outPath, err := buildWheel(testSpec("myrepo", "1.0.0", "manylinux_2_17_x86_64"), cfg)
 	if err != nil {
 		t.Fatalf("buildWheel: %v", err)
 	}
@@ -122,11 +123,7 @@ func TestBuildWheel_UnixShim(t *testing.T) {
 
 func TestBuildWheel_WindowsShim(t *testing.T) {
 	cfg := testCfg(t)
-	outPath, err := buildWheel(
-		[]byte("exe data"), "myrepo.exe", "1.0.0",
-		cfg, "1.0.0", "win_amd64",
-		[]byte("desc"), []byte("lic"),
-	)
+	outPath, err := buildWheel(testSpec("myrepo.exe", "1.0.0", "win_amd64"), cfg)
 	if err != nil {
 		t.Fatalf("buildWheel: %v", err)
 	}
@@ -147,11 +144,16 @@ func TestBuildWheel_MetadataContents(t *testing.T) {
 	cfg.Summary = "My great tool"
 	cfg.LicenseExpr = "Apache-2.0"
 
-	outPath, err := buildWheel(
-		[]byte("bin"), "myrepo", "3.1.4",
-		cfg, "3.1.4", "manylinux_2_17_x86_64",
-		[]byte("long description here"), []byte("Apache License"),
-	)
+	spec := WheelSpec{
+		BinaryData:      []byte("bin"),
+		BinaryFilename:  "myrepo",
+		BinaryVersion:   "3.1.4",
+		PyVersion:       "3.1.4",
+		PlatformTag:     "manylinux_2_17_x86_64",
+		DescriptionData: []byte("long description here"),
+		LicenseData:     []byte("Apache License"),
+	}
+	outPath, err := buildWheel(spec, cfg)
 	if err != nil {
 		t.Fatalf("buildWheel: %v", err)
 	}
@@ -176,11 +178,7 @@ func TestBuildWheel_MetadataContents(t *testing.T) {
 
 func TestBuildWheel_WheelTag(t *testing.T) {
 	cfg := testCfg(t)
-	outPath, err := buildWheel(
-		[]byte("bin"), "myrepo", "1.0.0",
-		cfg, "1.0.0", "win_amd64",
-		[]byte("d"), []byte("l"),
-	)
+	outPath, err := buildWheel(testSpec("myrepo", "1.0.0", "win_amd64"), cfg)
 	if err != nil {
 		t.Fatalf("buildWheel: %v", err)
 	}
@@ -197,11 +195,7 @@ func TestBuildWheel_EntryPoints(t *testing.T) {
 	cfg := testCfg(t)
 	cfg.EntryPoint = "my-cli"
 
-	outPath, err := buildWheel(
-		[]byte("bin"), "myrepo", "1.0.0",
-		cfg, "1.0.0", "manylinux_2_17_x86_64",
-		[]byte("d"), []byte("l"),
-	)
+	outPath, err := buildWheel(testSpec("myrepo", "1.0.0", "manylinux_2_17_x86_64"), cfg)
 	if err != nil {
 		t.Fatalf("buildWheel: %v", err)
 	}
@@ -216,11 +210,7 @@ func TestBuildWheel_EntryPoints(t *testing.T) {
 
 func TestBuildWheel_RecordPresent(t *testing.T) {
 	cfg := testCfg(t)
-	outPath, err := buildWheel(
-		[]byte("bin"), "myrepo", "1.0.0",
-		cfg, "1.0.0", "manylinux_2_17_x86_64",
-		[]byte("d"), []byte("l"),
-	)
+	outPath, err := buildWheel(testSpec("myrepo", "1.0.0", "manylinux_2_17_x86_64"), cfg)
 	if err != nil {
 		t.Fatalf("buildWheel: %v", err)
 	}
@@ -244,11 +234,7 @@ func TestBuildWheel_HyphenatedPackage(t *testing.T) {
 	cfg.PackageName = "my-tool"
 	cfg.EntryPoint = "my-tool"
 
-	outPath, err := buildWheel(
-		[]byte("bin"), "my-tool", "1.0.0",
-		cfg, "1.0.0", "manylinux_2_17_x86_64",
-		[]byte("d"), []byte("l"),
-	)
+	outPath, err := buildWheel(testSpec("my-tool", "1.0.0", "manylinux_2_17_x86_64"), cfg)
 	if err != nil {
 		t.Fatalf("buildWheel: %v", err)
 	}
@@ -287,7 +273,6 @@ func TestWheelFilename(t *testing.T) {
 }
 
 func TestWheelFilename_Py3Tag(t *testing.T) {
-	// The filename must use "py3", not "py30".
 	got := wheelFilename("pkg", "1.0.0", "win_amd64")
 	if !strings.Contains(got, "-py3-") {
 		t.Errorf("expected -py3- in filename, got %q", got)

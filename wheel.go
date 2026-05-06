@@ -2,9 +2,6 @@
 //
 // A wheel is a zip file with a specific internal layout. This file handles
 // building the shim package, metadata, and RECORD, then writing the zip.
-//
-// Note: the Python compatibility tag is "py30" (any Python 3), consistent with
-// the Tag field in the WHEEL metadata.
 package main
 
 import (
@@ -30,7 +27,7 @@ func normalize(name string) string {
 // wheelFilename returns the canonical .whl filename for the given package,
 // version, and platform tag.
 func wheelFilename(pkg, version, plat string) string {
-	return fmt.Sprintf("%s-%s-py30-none-%s.whl", normalize(pkg), version, plat)
+	return fmt.Sprintf("%s-%s-py3-none-%s.whl", normalize(pkg), version, plat)
 }
 
 // recordHash returns the base64url (no-padding) SHA-256 digest of data in the
@@ -66,40 +63,35 @@ type wheelEntry struct {
 	exe  bool // set 0o755 instead of 0o644
 }
 
+// WheelSpec holds per-platform inputs for building a single wheel.
+type WheelSpec struct {
+	BinaryData      []byte
+	BinaryFilename  string // filename of the binary inside the archive
+	BinaryVersion   string // upstream version string (without leading "v")
+	PyVersion       string // Python package version string
+	PlatformTag     string // Python wheel platform tag, e.g. "manylinux_2_17_x86_64"
+	DescriptionData []byte // Markdown long description
+	LicenseData     []byte // license file contents
+}
+
 // buildWheel writes a Python wheel containing the given binary, shim package,
 // and metadata. It returns the path of the written .whl file.
-//
-// Parameters:
-//   - binaryData: raw bytes of the executable
-//   - binaryFilename: filename the binary will have inside the wheel
-//   - binVer: upstream binary version string (without leading "v")
-//   - cfg: build configuration (package name, repo, etc.)
-//   - pyVersion: Python package version string
-//   - plat: Python wheel platform tag
-//   - descriptionData: Markdown long description
-//   - licenseData: license file contents
-func buildWheel(
-	binaryData []byte,
-	binaryFilename, binVer string,
-	cfg *Config,
-	pyVersion, plat string,
-	descriptionData, licenseData []byte,
-) (string, error) {
+func buildWheel(spec WheelSpec, cfg *Config) (string, error) {
 	pkg := cfg.PackageName
 	pkgNorm := normalize(pkg)
-	isWindows := strings.HasSuffix(binaryFilename, ".exe")
+	isWindows := strings.HasSuffix(spec.BinaryFilename, ".exe")
 
-	shimSrc := fmt.Sprintf(unixShim, binaryFilename)
+	shimSrc := fmt.Sprintf(unixShim, spec.BinaryFilename)
 	if isWindows {
-		shimSrc = fmt.Sprintf(windowsShim, binaryFilename)
+		shimSrc = fmt.Sprintf(windowsShim, spec.BinaryFilename)
 	}
 
 	initSrc := fmt.Sprintf(
 		"# %s — generated shim package\n__version__ = %q\n",
-		pkg, pyVersion,
+		pkg, spec.PyVersion,
 	)
 
-	distInfo := fmt.Sprintf("%s-%s.dist-info", pkgNorm, pyVersion)
+	distInfo := fmt.Sprintf("%s-%s.dist-info", pkgNorm, spec.PyVersion)
 
 	licenseExpr := cfg.LicenseExpr
 	if licenseExpr == "" {
@@ -120,12 +112,12 @@ func buildWheel(
 			"Description-Content-Type: text/markdown; charset=UTF-8; variant=GFM\n"+
 			"\n"+
 			"%s",
-		pkg, pyVersion, cfg.Summary, cfg.Repo, licenseExpr, string(descriptionData),
+		pkg, spec.PyVersion, cfg.Summary, cfg.Repo, licenseExpr, string(spec.DescriptionData),
 	)
 
 	wheelMeta := fmt.Sprintf(
 		"Wheel-Version: 1.0\nGenerator: buildwheels\nRoot-Is-Purelib: false\nTag: py3-none-%s\n",
-		plat,
+		spec.PlatformTag,
 	)
 
 	entryPoints := fmt.Sprintf(
@@ -134,13 +126,13 @@ func buildWheel(
 	)
 
 	entries := []wheelEntry{
-		{pkgNorm + "/" + binaryFilename, binaryData, true},
+		{pkgNorm + "/" + spec.BinaryFilename, spec.BinaryData, true},
 		{pkgNorm + "/__init__.py", []byte(initSrc), false},
 		{pkgNorm + "/_shim.py", []byte(shimSrc), false},
 		{distInfo + "/METADATA", []byte(metadata), false},
 		{distInfo + "/WHEEL", []byte(wheelMeta), false},
 		{distInfo + "/entry_points.txt", []byte(entryPoints), false},
-		{distInfo + "/licenses/LICENSE.txt", licenseData, false},
+		{distInfo + "/licenses/LICENSE.txt", spec.LicenseData, false},
 	}
 
 	// Build RECORD (path, hash, size per entry; RECORD itself has empty hash/size).
@@ -199,7 +191,7 @@ func buildWheel(
 		return "", fmt.Errorf("closing zip: %w", err)
 	}
 
-	out := filepath.Join(cfg.Output, wheelFilename(pkg, pyVersion, plat))
+	out := filepath.Join(cfg.Output, wheelFilename(pkg, spec.PyVersion, spec.PlatformTag))
 	if err := os.WriteFile(out, buf.Bytes(), 0o644); err != nil {
 		return "", fmt.Errorf("write wheel: %w", err)
 	}

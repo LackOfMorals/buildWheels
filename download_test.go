@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,7 +17,7 @@ func TestCachedDownload_NoCache(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := cachedDownload(srv.URL+"/file.bin", "")
+	got, err := cachedDownload(context.Background(),srv.URL+"/file.bin", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -35,7 +36,7 @@ func TestCachedDownload_CacheMiss_Downloads(t *testing.T) {
 	defer srv.Close()
 
 	cacheDir := t.TempDir()
-	got, err := cachedDownload(srv.URL+"/tool.tar.gz", cacheDir)
+	got, err := cachedDownload(context.Background(),srv.URL+"/tool.tar.gz", cacheDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -55,7 +56,7 @@ func TestCachedDownload_CacheMiss_WritesFile(t *testing.T) {
 	defer srv.Close()
 
 	cacheDir := t.TempDir()
-	_, err := cachedDownload(srv.URL+"/tool.tar.gz", cacheDir)
+	_, err := cachedDownload(context.Background(),srv.URL+"/tool.tar.gz", cacheDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -85,7 +86,7 @@ func TestCachedDownload_CacheHit_NoHTTP(t *testing.T) {
 		t.Fatalf("write pre-seeded cache: %v", err)
 	}
 
-	got, err := cachedDownload(srv.URL+"/tool.tar.gz", cacheDir)
+	got, err := cachedDownload(context.Background(),srv.URL+"/tool.tar.gz", cacheDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -103,7 +104,7 @@ func TestCachedDownload_HTTPError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := cachedDownload(srv.URL+"/file.bin", "")
+	_, err := cachedDownload(context.Background(),srv.URL+"/file.bin", "")
 	if err == nil {
 		t.Fatal("expected error for HTTP 500, got nil")
 	}
@@ -118,7 +119,7 @@ func TestCachedDownload_CreatesSubdirectory(t *testing.T) {
 
 	// Use a nested cache dir that doesn't exist yet.
 	cacheDir := filepath.Join(t.TempDir(), "nested", "cache")
-	_, err := cachedDownload(srv.URL+"/tool.tar.gz", cacheDir)
+	_, err := cachedDownload(context.Background(),srv.URL+"/tool.tar.gz", cacheDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

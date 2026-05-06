@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,7 +20,7 @@ func TestResolveLicense_LocalFile(t *testing.T) {
 	}
 
 	cfg := &Config{LicensePath: f, Repo: "owner/repo"}
-	got, err := resolveLicense(cfg)
+	got, err := resolveLicense(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -30,7 +31,7 @@ func TestResolveLicense_LocalFile(t *testing.T) {
 
 func TestResolveLicense_LocalFile_NotFound(t *testing.T) {
 	cfg := &Config{LicensePath: "/nonexistent/path/LICENSE", Repo: "owner/repo"}
-	_, err := resolveLicense(cfg)
+	_, err := resolveLicense(context.Background(), cfg)
 	if err == nil {
 		t.Fatal("expected error for missing license file, got nil")
 	}
@@ -66,7 +67,7 @@ func TestResolveLicense_FetchFromRepo_LicenseTxt(t *testing.T) {
 	_ = srv // reserved for future injectable base-URL refactor
 
 	cfg := &Config{LicensePath: licensePath, Repo: "owner/repo"}
-	got, err := resolveLicense(cfg)
+	got, err := resolveLicense(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -81,7 +82,7 @@ func TestResolveLicense_NoPathNoRepo_Fails(t *testing.T) {
 	// Use a syntactically valid but non-routable repo name so the test is
 	// deterministic even on machines with internet access.
 	cfg := &Config{LicensePath: "", Repo: "invalid-host-that-should-not-exist-xyz/repo"}
-	_, err := resolveLicense(cfg)
+	_, err := resolveLicense(context.Background(), cfg)
 	// We accept either an error (network failure) or a success if somehow
 	// the URL resolves — the important thing is that the function doesn't panic.
 	_ = err

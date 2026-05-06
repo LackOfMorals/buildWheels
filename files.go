@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -10,7 +11,7 @@ import (
 // resolveLicense returns the license file bytes. When cfg.LicensePath is set
 // it reads from disk; otherwise it tries to fetch LICENSE.txt then LICENSE
 // from the main branch of cfg.Repo.
-func resolveLicense(cfg *Config) ([]byte, error) {
+func resolveLicense(ctx context.Context, cfg *Config) ([]byte, error) {
 	if cfg.LicensePath != "" {
 		data, err := os.ReadFile(cfg.LicensePath)
 		if err != nil {
@@ -23,7 +24,7 @@ func resolveLicense(cfg *Config) ([]byte, error) {
 	for _, name := range []string{"LICENSE.txt", "LICENSE"} {
 		url := fmt.Sprintf("https://raw.githubusercontent.com/%s/main/%s", cfg.Repo, name)
 		slog.Debug("fetching license from repo", "url", url)
-		data, err := httpGet(url)
+		data, err := httpGet(ctx, url)
 		if err == nil {
 			slog.Info("fetched license from repo", "repo", cfg.Repo, "file", name)
 			return data, nil

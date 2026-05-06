@@ -41,11 +41,33 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 func main() {
+	cfg, err := parseConfig()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		flag.Usage()
+		os.Exit(1)
+	}
+	setupLogging(cfg.Debug)
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if err := run(ctx, cfg); err != nil {
+		slog.Error("fatal", "error", err)
+		os.Exit(1)
+	}
+}
+
+// parseConfig parses CLI flags, validates required fields, and derives
+// defaults. It returns an error for any missing or malformed input.
+func parseConfig() (*Config, error) {
 	cfg := &Config{}
 
 	// GitHub source
@@ -79,17 +101,12 @@ func main() {
 	flag.BoolVar(&cfg.Debug, "debug", false, "Enable debug-level logging")
 
 	flag.Parse()
-	setupLogging(cfg.Debug)
 
-	// Validate -repo
 	if cfg.Repo == "" {
-		fmt.Fprintln(os.Stderr, "error: -repo is required (e.g. -repo neo4j/mcp)")
-		flag.Usage()
-		os.Exit(1)
+		return nil, fmt.Errorf("-repo is required (e.g. -repo neo4j/mcp)")
 	}
 	if !strings.Contains(cfg.Repo, "/") {
-		fmt.Fprintln(os.Stderr, "error: -repo must be in owner/name format (e.g. neo4j/mcp)")
-		os.Exit(1)
+		return nil, fmt.Errorf("-repo must be in owner/name format (e.g. neo4j/mcp)")
 	}
 
 	// Derive defaults from the repo name component.
@@ -123,15 +140,11 @@ func main() {
 		}
 	}
 
-	if err := run(cfg); err != nil {
-		slog.Error("fatal error", "error", err)
-		os.Exit(1)
-	}
+	return cfg, nil
 }
 
 // run executes the full build (and optional upload) pipeline.
-// It is separated from main so that it can be invoked in tests.
-func run(cfg *Config) error {
+func run(ctx context.Context, cfg *Config) error {
 	if err := os.MkdirAll(cfg.Output, 0o755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", cfg.Output, err)
 	}
@@ -156,7 +169,7 @@ func run(cfg *Config) error {
 		}
 	}
 
-	licenseData, err := resolveLicense(cfg)
+	licenseData, err := resolveLicense(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("license: %w", err)
 	}
@@ -166,7 +179,8 @@ func run(cfg *Config) error {
 		return fmt.Errorf("description: %w", err)
 	}
 
-	rel, err := fetchRelease(cfg.Repo, cfg.Version)
+	ghClient := newGithubClient()
+	rel, err := ghClient.fetchRelease(ctx, cfg.Repo, cfg.Version)
 	if err != nil {
 		return fmt.Errorf("fetch release: %w", err)
 	}
@@ -182,7 +196,7 @@ func run(cfg *Config) error {
 	)
 
 	// Log available asset names at debug so mismatches are immediately obvious.
-	if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
+	if slog.Default().Enabled(ctx, slog.LevelDebug) {
 		names := make([]string, len(rel.Assets))
 		for i, a := range rel.Assets {
 			names[i] = a.Name
@@ -202,6 +216,12 @@ func run(cfg *Config) error {
 		slog.Warn("no matching assets found in release", "tag", rel.TagName)
 	}
 
+	// Hoist cache path — it is the same for every platform in this run.
+	cacheDir := ""
+	if cfg.CacheDir != "" {
+		cacheDir = filepath.Join(cfg.CacheDir, binaryVersion)
+	}
+
 	var built []string
 	for _, ae := range assetURLs {
 		slog.Info("building wheel",
@@ -210,12 +230,7 @@ func run(cfg *Config) error {
 			"asset", ae.AssetName,
 		)
 
-		cacheDir := ""
-		if cfg.CacheDir != "" {
-			cacheDir = filepath.Join(cfg.CacheDir, binaryVersion)
-		}
-
-		archiveData, err := cachedDownload(ae.URL, cacheDir)
+		archiveData, err := cachedDownload(ctx, ae.URL, cacheDir)
 		if err != nil {
 			slog.Error("download failed", "asset", ae.AssetName, "error", err)
 			continue
@@ -227,11 +242,15 @@ func run(cfg *Config) error {
 			continue
 		}
 
-		outPath, err := buildWheel(
-			binaryData, ae.BinaryInArc, binaryVersion,
-			cfg, pyVersion, ae.WheelTag,
-			descriptionData, licenseData,
-		)
+		outPath, err := buildWheel(WheelSpec{
+			BinaryData:      binaryData,
+			BinaryFilename:  ae.BinaryInArc,
+			BinaryVersion:   binaryVersion,
+			PyVersion:       pyVersion,
+			PlatformTag:     ae.WheelTag,
+			DescriptionData: descriptionData,
+			LicenseData:     licenseData,
+		}, cfg)
 		if err != nil {
 			slog.Error("wheel build failed", "platform", ae.PlatformKey, "error", err)
 			continue
@@ -240,7 +259,7 @@ func run(cfg *Config) error {
 
 		if cfg.Upload {
 			slog.Info("uploading wheel", "file", filepath.Base(outPath), "pypi_url", cfg.PyPIURL)
-			if err := uploadToPyPI(outPath, cfg.PackageName, pyVersion, cfg.PyPIURL, cfg.PyPIUser, pypiPassword); err != nil {
+			if err := uploadToPyPI(ctx, outPath, cfg.PackageName, pyVersion, cfg.PyPIURL, cfg.PyPIUser, pypiPassword); err != nil {
 				slog.Error("upload failed", "file", filepath.Base(outPath), "error", err)
 				continue
 			}
@@ -248,6 +267,10 @@ func run(cfg *Config) error {
 		}
 
 		built = append(built, outPath)
+	}
+
+	if len(assetURLs) > 0 && len(built) == 0 {
+		return fmt.Errorf("all %d platform build(s) failed", len(assetURLs))
 	}
 
 	slog.Info("done", "wheels_built", len(built), "output_dir", cfg.Output)

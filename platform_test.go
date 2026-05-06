@@ -19,10 +19,10 @@ func assetList(names ...string) []ghAsset {
 
 func TestResolveAssets_PrimaryPattern(t *testing.T) {
 	assets := assetList(
-		"mytool_1.2.3_Linux_x86_64.tar.gz",
-		"mytool_1.2.3_Darwin_arm64.tar.gz",
+		"mytool_1.2.3_linux_x86_64.tar.gz",
+		"mytool_1.2.3_darwin_arm64.tar.gz",
 	)
-	result := resolveAssetsByPlatform(assets, "mytool", "1.2.3", []string{"Linux_x86_64", "Darwin_arm64"})
+	result := resolveAssetsByPlatform(assets, "mytool", "1.2.3", []string{"linux_x86_64", "darwin_arm64"})
 	if len(result) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(result))
 	}
@@ -41,27 +41,27 @@ func TestResolveAssets_PrimaryPattern(t *testing.T) {
 
 func TestResolveAssets_FallbackPattern(t *testing.T) {
 	// No version in name — should fall back to the no-version pattern.
-	assets := assetList("mytool_Linux_x86_64.tar.gz")
-	result := resolveAssetsByPlatform(assets, "mytool", "1.0.0", []string{"Linux_x86_64"})
+	assets := assetList("mytool_linux_x86_64.tar.gz")
+	result := resolveAssetsByPlatform(assets, "mytool", "1.0.0", []string{"linux_x86_64"})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(result))
 	}
-	if result[0].AssetName != "mytool_Linux_x86_64.tar.gz" {
+	if result[0].AssetName != "mytool_linux_x86_64.tar.gz" {
 		t.Errorf("unexpected asset name: %s", result[0].AssetName)
 	}
 }
 
 func TestResolveAssets_PlatformFilter(t *testing.T) {
 	assets := assetList(
-		"mytool_1.0.0_Linux_x86_64.tar.gz",
-		"mytool_1.0.0_Darwin_arm64.tar.gz",
-		"mytool_1.0.0_Windows_x86_64.zip",
+		"mytool_1.0.0_linux_x86_64.tar.gz",
+		"mytool_1.0.0_darwin_arm64.tar.gz",
+		"mytool_1.0.0_windows_x86_64.zip",
 	)
-	result := resolveAssetsByPlatform(assets, "mytool", "1.0.0", []string{"Linux_x86_64"})
+	result := resolveAssetsByPlatform(assets, "mytool", "1.0.0", []string{"linux_x86_64"})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(result))
 	}
-	if result[0].PlatformKey != "Linux_x86_64" {
+	if result[0].PlatformKey != "linux_x86_64" {
 		t.Errorf("unexpected platform: %s", result[0].PlatformKey)
 	}
 }
@@ -79,8 +79,8 @@ func TestResolveAssets_AllPlatformsWhenFilterEmpty(t *testing.T) {
 }
 
 func TestResolveAssets_WindowsBinaryHasExeSuffix(t *testing.T) {
-	assets := assetList("mytool_1.0.0_Windows_x86_64.zip")
-	result := resolveAssetsByPlatform(assets, "mytool", "1.0.0", []string{"Windows_x86_64"})
+	assets := assetList("mytool_1.0.0_windows_x86_64.zip")
+	result := resolveAssetsByPlatform(assets, "mytool", "1.0.0", []string{"windows_x86_64"})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(result))
 	}
@@ -101,8 +101,8 @@ func TestResolveAssets_NotFound(t *testing.T) {
 }
 
 func TestResolveAssets_WheelTagSet(t *testing.T) {
-	assets := assetList("mytool_1.0.0_Linux_x86_64.tar.gz")
-	result := resolveAssetsByPlatform(assets, "mytool", "1.0.0", []string{"Linux_x86_64"})
+	assets := assetList("mytool_1.0.0_linux_x86_64.tar.gz")
+	result := resolveAssetsByPlatform(assets, "mytool", "1.0.0", []string{"linux_x86_64"})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(result))
 	}
@@ -179,12 +179,12 @@ func TestInferPlatform(t *testing.T) {
 		wantKey  string
 		wantTag  string
 	}{
-		{"tool_1.0_linux_x86_64.tar.gz", "Linux_x86_64", "manylinux_2_17_x86_64"},
-		{"tool_1.0_darwin_arm64.tar.gz", "Darwin_arm64", "macosx_11_0_arm64"},
-		{"tool_1.0_windows_x86_64.zip", "Windows_x86_64", "win_amd64"},
-		{"tool_1.0_linux_arm64.tar.gz", "Linux_arm64", "manylinux_2_17_aarch64"},
-		{"tool_1.0_darwin_x86_64.tar.gz", "Darwin_x86_64", "macosx_10_9_x86_64"},
-		{"tool_1.0_windows_arm64.zip", "Windows_arm64", "win_arm64"},
+		{"tool_1.0_linux_x86_64.tar.gz", "linux_x86_64", "manylinux_2_17_x86_64"},
+		{"tool_1.0_darwin_arm64.tar.gz", "darwin_arm64", "macosx_11_0_arm64"},
+		{"tool_1.0_windows_x86_64.zip", "windows_x86_64", "win_amd64"},
+		{"tool_1.0_linux_arm64.tar.gz", "linux_arm64", "manylinux_2_17_aarch64"},
+		{"tool_1.0_darwin_x86_64.tar.gz", "darwin_x86_64", "macosx_10_9_x86_64"},
+		{"tool_1.0_windows_arm64.zip", "windows_arm64", "win_arm64"},
 		{"completely_unknown.tar.gz", "unknown", "any"},
 	}
 	for _, tt := range tests {
@@ -209,15 +209,15 @@ func TestBuildWantedSet_NilMeansAll(t *testing.T) {
 }
 
 func TestBuildWantedSet_Specific(t *testing.T) {
-	s := buildWantedSet([]string{"Linux_x86_64", "Darwin_arm64"})
-	if !s["Linux_x86_64"] {
-		t.Error("Linux_x86_64 should be in the set")
+	s := buildWantedSet([]string{"linux_x86_64", "darwin_arm64"})
+	if !s["linux_x86_64"] {
+		t.Error("linux_x86_64 should be in the set")
 	}
-	if !s["Darwin_arm64"] {
-		t.Error("Darwin_arm64 should be in the set")
+	if !s["darwin_arm64"] {
+		t.Error("darwin_arm64 should be in the set")
 	}
-	if s["Windows_x86_64"] {
-		t.Error("Windows_x86_64 should NOT be in the set")
+	if s["windows_x86_64"] {
+		t.Error("windows_x86_64 should NOT be in the set")
 	}
 }
 
